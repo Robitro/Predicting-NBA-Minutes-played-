@@ -1,0 +1,40 @@
+---
+title: "Predicting NBA Minutes played"
+Author: "Robert Miller"
+output: html_document
+date: "2022-12-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidymodels)
+library(corrplot)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+```
+Data cleaning
+```{r}
+NBA_Player_box_scores <- read.csv("2012-18_playerBoxScore.csv")
+
+
+NBA_Standings <- read.csv("2012-18_standings.csv")
+NBA_Standings <- select(NBA_Standings,-c(rankOrd,stk,wpyth13.91:lpyth16.5))
+
+if(NBA_Player_box_scores$gmDate == NBA_Standings$stDate & NBA_Player_box_scores$teamAbbr == NBA_Standings$teamAbbr){
+  
+}
+  
+```
+We dont need officals names,divisions
+
+```{r}
+correlation <- cor(select_if(NBA_Player_box_scores,is.numeric))
+
+corrplot(correlation,type = 'lower', diag = FALSE, method='color')
+
+```
+
+
+```{r}
+min_recipe <- recipe(playMin ~ ., data = NBA_Player_box_scores ) %>% step_dummy(all_nominal_predictors()) %>% step_interact()
