@@ -18,13 +18,6 @@ library(pracma)
 ```
 Data cleaning
 ```{r}
-NBA_Player_box_scores <- read.csv("2012-18_playerBoxScore.csv")
-
-NBA_Player_box_scores$teamRslt <- as.factor(NBA_Player_box_scores$teamRslt)
-
-
-
-box<- box_scores(0022100001:0022100002, box_score_types = c("Traditional", "Advanced"),result_types = c("player","team"), join_data = TRUE)
 
 
 seq <- seq(22100001,22101320,8)
@@ -32,13 +25,16 @@ seq <- seq(22100001,22101320,8)
 
 box_team<- box_scores(seq,box_score_types = c("Traditional", "Advanced"),result_types = "team", join_data = TRUE)  
 
+save(box_team,file="box_team.rda")
+
+load(file = "box_team.rda")
+
 box_player <-  box_scores(seq,box_score_types = c("Traditional", "Advanced"),result_types = "player", join_data = TRUE)
+save(box_player,file = "box_player.rda")
+days_scores(seq)
 
 
 
-
-NBA_Standings <- read.csv("2012-18_standings.csv")
-NBA_Standings <- select(NBA_Standings,-c(rankOrd,stk,wpyth13.91:lpyth16.5))
 
 #if(NBA_Player_box_scores$gmDate == NBA_Standings$stDate & NBA_Player_box_scores$teamAbbr == NBA_Standings$teamAbbr){
   
@@ -47,7 +43,7 @@ NBA_Standings <- select(NBA_Standings,-c(rankOrd,stk,wpyth13.91:lpyth16.5))
 We dont need officals names,divisions
 
 ```{r}
-correlation <- cor(select_if(NBA_Player_box_scores,is.numeric))
+correlation <- cor(select_if(box_player,is.numeric))
 
 corrplot(correlation,type = 'lower', diag = FALSE, method='color')
 
