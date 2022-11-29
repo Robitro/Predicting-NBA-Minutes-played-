@@ -6,7 +6,8 @@ date: "2022-12-09"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE,fig.width = 10, fig.height = 5)
+
 devtools::install_github("abresler/nbastatR")
 library(nbastatR)
 library(tidymodels)
@@ -17,45 +18,62 @@ library(ggplot2)
 library(pracma)
 ```
 Data cleaning
-```{r}
 
-
+```{r, eval=FALSE}
 seq <- seq(22100001,22101320,8)
+box_team<- box_scores(seq,box_score_types = c("Traditional", "Advanced"),result_types = "team", join_data = TRUE) 
 
-
-box_team<- box_scores(seq,box_score_types = c("Traditional", "Advanced"),result_types = "team", join_data = TRUE)  
+get_seasons_rosters(seasons = 2021:2022, return_message = TRUE, nest_data = F)
 
 save(box_team,file="box_team.rda")
 
-load(file = "box_team.rda")
-
 box_player <-  box_scores(seq,box_score_types = c("Traditional", "Advanced"),result_types = "player", join_data = TRUE)
 save(box_player,file = "box_player.rda")
-days_scores(seq)
+
+```
+```{r}
+
+load(file = "box_team.rda")
+
+load(file = "box_player.rda")
 
 
 
 
-#if(NBA_Player_box_scores$gmDate == NBA_Standings$stDate & NBA_Player_box_scores$teamAbbr == NBA_Standings$teamAbbr){
+
+
+
+
   
   
 ```
-We dont need officals names,divisions
+
 
 ```{r}
-correlation <- cor(select_if(box_player,is.numeric))
+correlation <- cor(select_if(box_player[[2]][[1]],is.numeric))
+
+correlation
 
 corrplot(correlation,type = 'lower', diag = FALSE, method='color')
 
 ```
 
 ```{r}
-ggplot(NBA_Player_box_scores, aes(playPTS,playMin,colour = teamRslt)) + geom_point() 
+ggplot(box_player[[2]][[1]], aes(minExact,pts)) + geom_smooth() 
 
 ```
+As we can see, the more minutes a player plays there is an upward trajectory in points scored.This makes sense, as its often the case where the player that score the most points will play the most minutes.  What about 3 point shots? They are quickly dominating the NBA and 3pt attempts are up leaguewide. Is there a relationship between 3pt attempts and minutes played? what about 3pts attempted?  
 ```{r}
 
-ggplot(nba)
+ggplot(box_player[[2]][[1]], aes(minExact,fg3pct)) + geom_point() 
+
+
+```
+
 
 ```{r}
-min_recipe <- recipe(playMin ~ ., data = NBA_Player_box_scores ) %>% step_dummy(all_nominal_predictors()) %>% step_interact()
+ggplot(box_player[[2]][[1]], aes(minExact,netrtg)) + geom_point() 
+
+```
+
+Net rating is defined as offensive rating vs defensive rating. Offensive rating is a measure of how may points are scored by the player per 100 possessions of the basketball and defensive rating is measure of how many points they give up on defense per 100 possessions. If more points are scored then given up, this will result in a positive net rating. The best players often average a high positive net rating, for example Nikola Jokic a 6'11 Serbian Center that plays for the Denver Nuggets averaged net ratings of 14.8 in 20-21 season and 10.4 in 21-22 season, earning him back to back most valuable player awards. High net ratings may be a good predictor of many minutes played, but astronomically high or low net ratings are a result of a small sample size which may be a good predictor for players playing few minutes. 
