@@ -50,29 +50,38 @@ load(file = "box_player.rda")
 
 
 ```{r}
-correlation <- cor(select_if(box_player[[2]][[1]],is.numeric))
+#removes game id's, player id's, amd team id's
+player <- select(box_player[[2]][[1]],-c(idGame,idTeam,idPlayer))
 
-correlation
+
+
+
+correlation <- cor(select_if(player,is.numeric))
+
 
 corrplot(correlation,type = 'lower', diag = FALSE, method='color')
 
 ```
 
 ```{r}
-ggplot(box_player[[2]][[1]], aes(minExact,pts)) + geom_smooth() 
+ggplot(player,aes(minExact,pts))+ geom_point(aes(colour = cut(pctFG, c(0.0,0.25, 0.461,.667, 1.0))),size = 5) + facet_wrap(~groupStartPosition) 
 
 ```
-As we can see, the more minutes a player plays there is an upward trajectory in points scored.This makes sense, as its often the case where the player that score the most points will play the most minutes.  What about 3 point shots? They are quickly dominating the NBA and 3pt attempts are up leaguewide. Is there a relationship between 3pt attempts and minutes played? what about 3pts attempted?  
+Basketball is grouped into 3 groups (guards, forwards, centers) and 5 positions (point guard, shooting guard, small forward, power forward, and center). Player listed as NA do not have a starting position in the game and played off the bench. As we can see, the more minutes a player plays there is an upward trajectory in points scored. This makes sense, as its often the case where the player that score the most points will play the most minutes.  What about 3 point shots? They are quickly dominating the NBA and 3pt attempts are up league-wide. Is there a relationship between 3pt attempts and minutes played? what about 3pts attempted?  
 ```{r}
 
-ggplot(box_player[[2]][[1]], aes(minExact,fg3pct)) + geom_point() 
+ggplot(player, aes(minExact,pctFG3)) + geom_point(aes(colour = cut(fg3a,c(-1,0,2, 4,6,8,10,15))),size = 5) + facet_wrap(~groupStartPosition)
 
 
 ```
+As we can see both 3 point percentage and attempts is very dependent on minutes played. Centers shoot much less threes than guards and even forwards as a result of their often larger size prefer to shoot around the rim. We can also see that as minutes increase there is a decrease in 3 point efficiency. There are bands around 0%,50%, 100% as a result of players taking only a couple threes and hitting or missing all of them. In the 2021-2022 season the league wide average shooting percentage was 35.4% (source:basketballreference.com)
 
 
 ```{r}
-ggplot(box_player[[2]][[1]], aes(minExact,netrtg)) + geom_point() 
+
+ggplot(player, aes(minExact,netrtg)) + geom_point() + facet_wrap(~groupStartPosition) 
+
+
 
 ```
 
