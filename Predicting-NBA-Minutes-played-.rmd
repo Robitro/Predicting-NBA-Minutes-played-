@@ -30,6 +30,11 @@ save(box_team,file="box_team.rda")
 box_player <-  box_scores(seq,box_score_types = c("Traditional", "Advanced"),result_types = "player", join_data = TRUE)
 save(box_player,file = "box_player.rda")
 
+#removes game id's, player id's, amd team id's
+player <- select(box_player[[2]][[1]],-c(idGame,idTeam,idPlayer))
+#creates observations of only starters
+starters <- player[complete.cases(player$groupStartPosition)]
+
 ```
 ```{r}
 
@@ -50,8 +55,6 @@ load(file = "box_player.rda")
 
 
 ```{r}
-#removes game id's, player id's, amd team id's
-player <- select(box_player[[2]][[1]],-c(idGame,idTeam,idPlayer))
 
 
 
@@ -62,27 +65,39 @@ correlation <- cor(select_if(player,is.numeric))
 corrplot(correlation,type = 'lower', diag = FALSE, method='color')
 
 ```
-
+Let's take a look at the distribution of minutes played by position.
 ```{r}
-ggplot(player,aes(minExact,pts))+ geom_point(aes(colour = cut(pctFG, c(0.0,0.25, 0.461,.667, 1.0))),size = 5) + facet_wrap(~groupStartPosition) 
+ggplot(starters, aes(minExact)) + geom_histogram(binwidth = 5, fill = "blue", color = "red") + facet_wrap(~groupStartPosition)
 
 ```
-Basketball is grouped into 3 groups (guards, forwards, centers) and 5 positions (point guard, shooting guard, small forward, power forward, and center). Player listed as NA do not have a starting position in the game and played off the bench. As we can see, the more minutes a player plays there is an upward trajectory in points scored. This makes sense, as its often the case where the player that score the most points will play the most minutes.  What about 3 point shots? They are quickly dominating the NBA and 3pt attempts are up league-wide. Is there a relationship between 3pt attempts and minutes played? what about 3pts attempted?  
+As we can see, Starters tend to average around 30 minutes of the 48 minutes of playing time in basketball, with a sharp drop-off of observations below 20 minutes and above 35 minutes. Center observations are much lower than centers and forwards since there are 2 guards and 2 forwards on the floor but only 1 center at any given time.
+
+```{r}
+ggplot(starters,aes(minExact,pts))+ geom_point(aes(colour = cut(fga, c(0.0,5, 10,15,20,35))),size = 5) + facet_wrap(~groupStartPosition) 
+
+```
+Basketball is grouped into 3 groups (guards, forwards, centers) and 5 positions (point guard, shooting guard, small forward, power forward, and center). Player listed as NA do not have a starting position in the game and played off the bench. As we can see, the more minutes a player plays there is an upward trajectory in points scored as well as shot attempts. This makes sense as the only way to score points is to shoot field goals or shoot free throws, and to shoot free-throws you need to be fouled which often occurs when a player is trying to make a shot.
 ```{r}
 
-ggplot(player, aes(minExact,pctFG3)) + geom_point(aes(colour = cut(fg3a,c(-1,0,2, 4,6,8,10,15))),size = 5) + facet_wrap(~groupStartPosition)
+ggplot(starters, aes(minExact,pctFG3)) + geom_point(aes(colour = cut(fg3a,c(-1,0,2, 4,6,8,10,15))),size = 5) + facet_wrap(~groupStartPosition)
 
 
 ```
 As we can see both 3 point percentage and attempts is very dependent on minutes played. Centers shoot much less threes than guards and even forwards as a result of their often larger size prefer to shoot around the rim. We can also see that as minutes increase there is a decrease in 3 point efficiency. There are bands around 0%,50%, 100% as a result of players taking only a couple threes and hitting or missing all of them. In the 2021-2022 season the league wide average shooting percentage was 35.4% (source:basketballreference.com)
 
+Scoring is a large part of the NBA but there are some players that play large chunks of minutes in an NBA game that are not known for their scoring prowess. Let's look at rebounds, a stat that counts the number of balls caught after a shot hits the rim or backboard in a game.
+
+```{r}
+ggplot(starters, aes(minExact,rebounds)) + geom_point(aes(colour = cut(fg3a,c(-1,0,2, 4,6,8,10,15))),size = 5) + facet_wrap(~groupStartPosition)
+
+```
 
 ```{r}
 
-ggplot(player, aes(minExact,netrtg)) + geom_point() + facet_wrap(~groupStartPosition) 
+ggplot(starters, aes(minExact,netrtg)) + geom_point() + facet_wrap(~groupStartPosition) 
 
 
 
 ```
 
-Net rating is defined as offensive rating vs defensive rating. Offensive rating is a measure of how may points are scored by the player per 100 possessions of the basketball and defensive rating is measure of how many points they give up on defense per 100 possessions. If more points are scored then given up, this will result in a positive net rating. The best players often average a high positive net rating, for example Nikola Jokic a 6'11 Serbian Center that plays for the Denver Nuggets averaged net ratings of 14.8 in 20-21 season and 10.4 in 21-22 season, earning him back to back most valuable player awards. High net ratings may be a good predictor of many minutes played, but astronomically high or low net ratings are a result of a small sample size which may be a good predictor for players playing few minutes. 
+Net rating is defined as offensive rating vs defensive rating. Offensive rating is a measure of how may points are scored by the player per 100 possessions of the basketball and defensive rating is measure of how many points they give up on defense per 100 possessions. If more points are scored then given up, this will result in a positive net rating. The best players often average a high positive net rating, for example Nikola Jokic a 6'11 Serbian Center that plays for the Denver Nuggets averaged net ratings of 14.8 in 20-21 season and 10.4 in 21-22 season source:(basketballreference.com), earning him back to back most valuable player awards. High net ratings may be a good predictor of many minutes played, but astronomically high or low net ratings are a result of a small sample size which may be a good predictor for players playing few minutes. 
