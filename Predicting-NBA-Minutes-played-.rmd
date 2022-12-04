@@ -88,7 +88,7 @@ As we can see both 3 point percentage and attempts is very dependent on minutes 
 Scoring is a large part of the NBA but there are some players that play large chunks of minutes in an NBA game that are not known for their scoring prowess. Let's look at rebounds, a stat that counts the number of balls caught after a shot hits the rim or backboard in a game.
 
 ```{r}
-ggplot(starters, aes(minExact,rebounds)) + geom_point(aes(colour = cut(fg3a,c(-1,0,2, 4,6,8,10,15))),size = 5) + facet_wrap(~groupStartPosition)
+ggplot(starters, aes(minExact,treb)) + geom_col(aes(colour = cut(,c(-1,0,2, 4,6,8,10,15))),size = 5) + facet_wrap(~groupStartPosition)
 
 ```
 
