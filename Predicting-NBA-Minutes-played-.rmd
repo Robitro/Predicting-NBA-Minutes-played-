@@ -33,7 +33,7 @@ save(box_player,file = "box_player.rda")
 #removes game id's, player id's, amd team id's
 player <- select(box_player[[2]][[1]],-c(idGame,idTeam,idPlayer))
 #creates observations of only starters
-starters <- player[complete.cases(player$groupStartPosition)]
+starters <- player[complete.cases(player$groupStartPosition),]
 
 ```
 ```{r}
@@ -58,8 +58,8 @@ load(file = "box_player.rda")
 
 
 
-
-correlation <- cor(select_if(player,is.numeric))
+cor_player <- cor(select_if(player,is.numeric))
+correlation <- cor(select_if(starter,is.numeric))
 
 
 corrplot(correlation,type = 'lower', diag = FALSE, method='color')
@@ -88,7 +88,7 @@ As we can see both 3 point percentage and attempts is very dependent on minutes 
 Scoring is a large part of the NBA but there are some players that play large chunks of minutes in an NBA game that are not known for their scoring prowess. Let's look at rebounds, a stat that counts the number of balls caught after a shot hits the rim or backboard in a game.
 
 ```{r}
-ggplot(starters, aes(minExact,treb)) + geom_col(aes(colour = cut(,c(-1,0,2, 4,6,8,10,15))),size = 5) + facet_wrap(~groupStartPosition)
+ggplot(starters, aes(minExact,treb, group=minExact, fill=oreb))+ geom_boxplot() + scale_x_discrete(breaks = seq(0,50,5))+facet_wrap(~groupStartPosition)
 
 ```
 
@@ -100,4 +100,62 @@ ggplot(starters, aes(minExact,netrtg)) + geom_point() + facet_wrap(~groupStartPo
 
 ```
 
-Net rating is defined as offensive rating vs defensive rating. Offensive rating is a measure of how may points are scored by the player per 100 possessions of the basketball and defensive rating is measure of how many points they give up on defense per 100 possessions. If more points are scored then given up, this will result in a positive net rating. The best players often average a high positive net rating, for example Nikola Jokic a 6'11 Serbian Center that plays for the Denver Nuggets averaged net ratings of 14.8 in 20-21 season and 10.4 in 21-22 season source:(basketballreference.com), earning him back to back most valuable player awards. High net ratings may be a good predictor of many minutes played, but astronomically high or low net ratings are a result of a small sample size which may be a good predictor for players playing few minutes. 
+Net rating is defined as offensive rating vs defensive rating. Offensive rating is a measure of how may points are scored by the player per 100 possessions of the basketball and defensive rating is measure of how many points they give up on defense per 100 possessions. If more points are scored then given up, this will result in a positive net rating. The best players often average a high positive net rating, for example Nikola Jokic a 6'11 Serbian Center that plays for the Denver Nuggets averaged net ratings of 14.8 in 20-21 season and 10.4 in 21-22 season source:(basketballreference.com), earning him back to back most valuable player awards. High net ratings may be a good predictor of many minutes played, but astronomically high or low net ratings are a result of a small sample size which may be a good predictor for players playing few minutes.
+
+
+## The Split
+```{r}
+set.seed(6688)
+starter_split <- initial_split(starters, prop=.7, strata = minExact) 
+
+starter_train <- training(starter_split)
+starter_test <- testing(starter_split)
+
+starter_folds <- vfold_cv(starter_train, v = 5, stata = minExact)
+
+```
+W will now create a 70/30 training vs testing split stratifying on the minutes an NBA player plays, we will then create our recipe using our training data to predict the number of minutes an NBA player plays in a game. A 5 fold cross validation of our training set was also created, which we will use in order to predict which model will preform best at predicting minutes played.
+
+```{r}
+
+min_re <- recipe(minExact ~ pts +oreb+dreb+ast+fg3a+fg3m+blk+pf+tov+fg2a+fg2m+fta+ftm+pctUSG+ortg+drtg+possesions+plusminus+groupStartPosition+pace+tov, data = starter_train) %>% step_dummy(all_nominal_predictors()) %>% step_normalize(all_numeric_predictors())
+
+
+```
+
+Here's our recipe for predicting minutes played. We're using points scored, offensive and defensive rebounds, assists(where a player passes a ball to another player who score a basket),3 points attempted and made, blocks, personal fouls (6 fouls will result in ejection), turnovers, 2 pointers attempted and made, free throws attempted and made, Usage rate(the percent of possessions where the player is involved in the play), Offensive and Defensive rating, the number of possessions, box plus minus (a measure where 0 is league average positive is the number of extra points per 100 possessions and negative is the number of points given up above average), starting position, pace(a measure of team possessions per game), and turnovers(losing the ball to the other team).
+
+
+#### Model Setup
+
+
+## Linear Regression
+```{r}
+lm <- linear_reg() %>% set_engine("lm")
+
+lm_wflow <- workflow() %>% 
+  add_model(lm_model) %>% 
+  add_recipe(min_re)
+
+```
+The first model we will fit will be linear regression, a simple model that trys to find a straight line relationship in our data.
+
+
+## K-Nearest Neighbors
+```{r}
+
+knn <- nearest_neighbor(
+  neighbors = tune(),
+  weight_func = tune()
+) %>%  
+  set_engine("kknn") %>% 
+  set_mode("regression")
+
+knn_wflow <-
+  workflow() %>% 
+  add_model(knn) %>% 
+  add_recipe(min_rec)
+
+
+```
+
