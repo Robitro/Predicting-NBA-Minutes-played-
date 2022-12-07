@@ -30,8 +30,8 @@ save(box_team,file="box_team.rda")
 box_player <-  box_scores(seq,box_score_types = c("Traditional", "Advanced"),result_types = "player", join_data = TRUE)
 save(box_player,file = "box_player.rda")
 
-#removes game id's, player id's, amd team id's
-player <- select(box_player[[2]][[1]],-c(idGame,idTeam,idPlayer))
+#removes game id's, player id's, and team id's
+player <- box_player[[2]][[1]]
 #creates observations of only starters
 starters <- player[complete.cases(player$groupStartPosition),]
 
@@ -52,7 +52,7 @@ load(file = "box_player.rda")
   
   
 ```
-
+Data from this project was scraped from the NBA website using NBAstatR, an R package designed to pull data from various basketball databases on the internet. Here we have taken a subset of 165 games of the 1320 games played in the 2021-2022 NBA season pulling every 8 games from the very start to very finish in the regular season. I then removed the data that had players coming off the bench so I could analyze the minutes played of starters.
 
 ```{r}
 
@@ -76,7 +76,7 @@ As we can see, Starters tend to average around 30 minutes of the 48 minutes of p
 ggplot(starters,aes(minExact,pts))+ geom_point(aes(colour = cut(fga, c(0.0,5, 10,15,20,35))),size = 5) + facet_wrap(~groupStartPosition) 
 
 ```
-Basketball is grouped into 3 groups (guards, forwards, centers) and 5 positions (point guard, shooting guard, small forward, power forward, and center). Player listed as NA do not have a starting position in the game and played off the bench. As we can see, the more minutes a player plays there is an upward trajectory in points scored as well as shot attempts. This makes sense as the only way to score points is to shoot field goals or shoot free throws, and to shoot free-throws you need to be fouled which often occurs when a player is trying to make a shot.
+Basketball is grouped into 3 groups (guards, forwards, centers) and 5 positions (point guard, shooting guard, small forward, power forward, and center). As we can see, the more minutes a player plays there is an upward trajectory in points scored as well as shot attempts. This makes sense as the only way to score points is to shoot field goals or shoot free throws, and to shoot free-throws you need to be fouled which often occurs when a player is trying to make a shot.
 ```{r}
 
 ggplot(starters, aes(minExact,pctFG3)) + geom_point(aes(colour = cut(fg3a,c(-1,0,2, 4,6,8,10,15))),size = 5) + facet_wrap(~groupStartPosition)
