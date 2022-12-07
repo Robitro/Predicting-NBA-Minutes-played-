@@ -3,10 +3,14 @@ title: "Predicting NBA Minutes played"
 Author: "Robert Miller"
 output: html_document
 date: "2022-12-09"
+code_folding: hide
+toc: true
+
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE,fig.width = 10, fig.height = 5)
+
 
 devtools::install_github("abresler/nbastatR")
 library(nbastatR)
@@ -30,10 +34,7 @@ save(box_team,file="box_team.rda")
 box_player <-  box_scores(seq,box_score_types = c("Traditional", "Advanced"),result_types = "player", join_data = TRUE)
 save(box_player,file = "box_player.rda")
 
-#removes game id's, player id's, and team id's
-player <- box_player[[2]][[1]]
-#creates observations of only starters
-starters <- player[complete.cases(player$groupStartPosition),]
+
 
 ```
 ```{r}
@@ -41,6 +42,11 @@ starters <- player[complete.cases(player$groupStartPosition),]
 load(file = "box_team.rda")
 
 load(file = "box_player.rda")
+
+player <- box_player[[2]][[1]]
+#creates observations of only starters
+starters <- player[complete.cases(player$groupStartPosition),]
+starters$groupStartPosition <- as.factor(starters$groupStartPosition)
 
 
 
@@ -54,12 +60,10 @@ load(file = "box_player.rda")
 ```
 Data from this project was scraped from the NBA website using NBAstatR, an R package designed to pull data from various basketball databases on the internet. Here we have taken a subset of 165 games of the 1320 games played in the 2021-2022 NBA season pulling every 8 games from the very start to very finish in the regular season. I then removed the data that had players coming off the bench so I could analyze the minutes played of starters.
 
-```{r}
+```{r,fig.dim = c(10,10)}
 
 
-
-cor_player <- cor(select_if(player,is.numeric))
-correlation <- cor(select_if(starter,is.numeric))
+correlation <- cor(select_if(starters,is.numeric))
 
 
 corrplot(correlation,type = 'lower', diag = FALSE, method='color')
@@ -69,6 +73,9 @@ Let's take a look at the distribution of minutes played by position.
 ```{r}
 ggplot(starters, aes(minExact)) + geom_histogram(binwidth = 5, fill = "blue", color = "red") + facet_wrap(~groupStartPosition)
 
+summary(starters$minExact[starters$groupStartPosition=="C"])
+summary(starters$minExact[starters$groupStartPosition=="F"])
+summary(starters$minExact[starters$groupStartPosition=="G"])
 ```
 As we can see, Starters tend to average around 30 minutes of the 48 minutes of playing time in basketball, with a sharp drop-off of observations below 20 minutes and above 35 minutes. Center observations are much lower than centers and forwards since there are 2 guards and 2 forwards on the floor but only 1 center at any given time.
 
@@ -83,7 +90,7 @@ ggplot(starters, aes(minExact,pctFG3)) + geom_point(aes(colour = cut(fg3a,c(-1,0
 
 
 ```
-As we can see both 3 point percentage and attempts is very dependent on minutes played. Centers shoot much less threes than guards and even forwards as a result of their often larger size prefer to shoot around the rim. We can also see that as minutes increase there is a decrease in 3 point efficiency. There are bands around 0%,50%, 100% as a result of players taking only a couple threes and hitting or missing all of them. In the 2021-2022 season the league wide average shooting percentage was 35.4% (source:basketballreference.com)
+As we can see both 3 point percentage and attempts is very dependent on minutes played. Centers shoot far fewer threes than guards and  forwards as a result of their often larger size prefer to shoot around the rim. Furthermore, We can also see that as minutes increase there is a decrease in 3 point efficiency. There are bands around 0%,50%, 100% as a result of players taking only a couple threes and hitting or missing all of them. In the 2021-2022 season the league wide average shooting percentage was 35.4% (source:basketballreference.com)
 
 Scoring is a large part of the NBA but there are some players that play large chunks of minutes in an NBA game that are not known for their scoring prowess. Let's look at rebounds, a stat that counts the number of balls caught after a shot hits the rim or backboard in a game.
 
@@ -100,7 +107,7 @@ ggplot(starters, aes(minExact,netrtg)) + geom_point() + facet_wrap(~groupStartPo
 
 ```
 
-Net rating is defined as offensive rating vs defensive rating. Offensive rating is a measure of how may points are scored by the player per 100 possessions of the basketball and defensive rating is measure of how many points they give up on defense per 100 possessions. If more points are scored then given up, this will result in a positive net rating. The best players often average a high positive net rating, for example Nikola Jokic a 6'11 Serbian Center that plays for the Denver Nuggets averaged net ratings of 14.8 in 20-21 season and 10.4 in 21-22 season source:(basketballreference.com), earning him back to back most valuable player awards. High net ratings may be a good predictor of many minutes played, but astronomically high or low net ratings are a result of a small sample size which may be a good predictor for players playing few minutes.
+Net rating is defined as offensive rating vs defensive rating. Offensive rating is a measure of how may points are scored by the player per 100 possessions of the basketball and defensive rating is measure of how many points they give up on defense per 100 possessions. If more points are scored then given up, this will result in a positive net rating. The best players often average a high positive net rating, for example Nikola Jokic: a 6'11 Serbian Center that plays for the Denver Nuggets averaged net ratings of 14.8 in 20-21 season and 10.4 in 21-22 season (source:basketballreference.com), earning him back to back most valuable player awards. High net ratings may be a good predictor of many minutes played, but astronomically high or low net ratings are a result of a small sample size which may be a good predictor for players playing few minutes.
 
 
 ## The Split
@@ -118,7 +125,7 @@ W will now create a 70/30 training vs testing split stratifying on the minutes a
 
 ```{r}
 
-min_re <- recipe(minExact ~ pts +oreb+dreb+ast+fg3a+fg3m+blk+pf+tov+fg2a+fg2m+fta+ftm+pctUSG+ortg+drtg+possesions+plusminus+groupStartPosition+pace+tov, data = starter_train) %>% step_dummy(all_nominal_predictors()) %>% step_normalize(all_numeric_predictors())
+min_re <- recipe(minExact ~ pts +oreb+dreb+ast+fg3a+fg3m+blk+pf+tov+fg2a+fg2m+fta+ftm+pctUSG+ortg+drtg+possessions+plusminus+groupStartPosition+pace+tov, data = starter_train) %>% step_dummy(all_nominal_predictors()) %>% step_normalize(all_numeric_predictors())
 
 
 ```
@@ -129,16 +136,20 @@ Here's our recipe for predicting minutes played. We're using points scored, offe
 #### Model Setup
 
 
-## Linear Regression
+## Elastic Net
 ```{r}
-lm <- linear_reg() %>% set_engine("lm")
+en <- linear_reg(penalty = tune(),mixture = tune()) %>% set_mode("regression") %>% 
+  set_engine("glmnet")
+
 
 lm_wflow <- workflow() %>% 
-  add_model(lm_model) %>% 
+  add_model(en) %>% 
   add_recipe(min_re)
 
+tune_grid <- grid_regular(penalty(c(-5,5)),mixture(c(0,1)),levels = 10)
+
 ```
-The first model we will fit will be linear regression, a simple model that trys to find a straight line relationship in our data.
+The first model we will fit will be elastic net regression, a regularized regression model which combines ridge and lasso coefficients to fit a linear model on our data.
 
 
 ## K-Nearest Neighbors
@@ -154,8 +165,26 @@ knn <- nearest_neighbor(
 knn_wflow <-
   workflow() %>% 
   add_model(knn) %>% 
-  add_recipe(min_rec)
+  add_recipe(min_re)
+
+
+```
+k nearest neighbors works by looking at the k closest data points and works to assign a value similar to those data points.
+
+## Boosted Trees
+```{r}
+bt <- boost_tree() %>% set_engine("xgboost") %>% set_mode("regression")
+
+bt_wf <- workflow() %>% add_model(bt %>% set_args(trees = tune())) %>% add_formula(minExact ~ pts +oreb+dreb+ast+fg3a+fg3m+blk+pf+tov+fg2a+fg2m+fta+ftm+pctUSG+ortg+drtg+possesions+plusminus+groupStartPosition+pace+tov)
+
+tree_grid <- grid_regular(trees(range= c(10,2000)),levels = 10)
 
 
 ```
 
+```{r,eval=FALSE}
+tune_tree <- tune_grid(bt_wf, resamples = starter_folds, grid = tree_grid, metrics = metric_set(roc_auc) )
+
+save(tune_tree, file = "tune_tree.rda")
+
+```
