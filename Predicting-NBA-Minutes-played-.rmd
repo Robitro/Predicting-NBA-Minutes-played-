@@ -20,6 +20,10 @@ library(tidyverse)
 library(dplyr)
 library(ggplot2)
 library(pracma)
+library(xgboost)
+library(kknn)
+library(randomForest)
+library(ranger)
 ```
 Data cleaning
 
@@ -125,12 +129,12 @@ W will now create a 70/30 training vs testing split stratifying on the minutes a
 
 ```{r}
 
-min_re <- recipe(minExact ~ pts +oreb+dreb+ast+fg3a+fg3m+blk+pf+tov+fg2a+fg2m+fta+ftm+pctUSG+ortg+drtg+possessions+plusminus+groupStartPosition+pace+tov, data = starter_train) %>% step_dummy(all_nominal_predictors()) %>% step_normalize(all_numeric_predictors())
+min_re <- recipe(minExact ~ pts+oreb+dreb+ast+fg3a+fg3m+blk+pf+tov+fg2a+fg2m+fta+ftm+pctUSG+ortg+drtg+possessions+plusminus+groupStartPosition+pace+tov+pctTOVTeam, data = starter_train) %>% step_dummy(all_nominal_predictors()) %>% step_normalize(all_numeric_predictors())
 
 
 ```
 
-Here's our recipe for predicting minutes played. We're using points scored, offensive and defensive rebounds, assists(where a player passes a ball to another player who score a basket),3 points attempted and made, blocks, personal fouls (6 fouls will result in ejection), turnovers, 2 pointers attempted and made, free throws attempted and made, Usage rate(the percent of possessions where the player is involved in the play), Offensive and Defensive rating, the number of possessions, box plus minus (a measure where 0 is league average positive is the number of extra points per 100 possessions and negative is the number of points given up above average), starting position, pace(a measure of team possessions per game), and turnovers(losing the ball to the other team).
+Here's our recipe for predicting minutes played. We're using points scored, offensive and defensive rebounds, assists(where a player passes a ball to another player who score a basket),3 points attempted and made, blocks, personal fouls (6 fouls will result in ejection), turnovers, 2 pointers attempted and made, free throws attempted and made, Usage rate(the percent of possessions where the player is involved in the play), Offensive and Defensive rating, the number of possessions, box plus minus (a measure where 0 is league average positive is the number of extra points per 100 possessions and negative is the number of points given up above average), starting position,and turnovers(losing the ball to the other team) and percentage of turnovers commited by the player from total team turnovers.
 
 
 #### Model Setup
@@ -142,11 +146,11 @@ en <- linear_reg(penalty = tune(),mixture = tune()) %>% set_mode("regression") %
   set_engine("glmnet")
 
 
-lm_wflow <- workflow() %>% 
+en_wflow <- workflow() %>% 
   add_model(en) %>% 
   add_recipe(min_re)
 
-tune_grid <- grid_regular(penalty(c(-5,5)),mixture(c(0,1)),levels = 10)
+en_grid <- grid_regular(penalty(c(-5,5)),mixture(c(0,1)),levels = 10)
 
 ```
 The first model we will fit will be elastic net regression, a regularized regression model which combines ridge and lasso coefficients to fit a linear model on our data.
@@ -167,6 +171,8 @@ knn_wflow <-
   add_model(knn) %>% 
   add_recipe(min_re)
 
+knn_grid <- grid_regular(neighbors(c(1,50)),weight_func(c("rectangular", "triangular", "epanechnikov", "biweight", "triweight", "cos", "inv", "gaussian", "rank", "optimal")),levels= 10)
+
 
 ```
 k nearest neighbors works by looking at the k closest data points and works to assign a value similar to those data points.
@@ -175,9 +181,20 @@ k nearest neighbors works by looking at the k closest data points and works to a
 ```{r}
 bt <- boost_tree() %>% set_engine("xgboost") %>% set_mode("regression")
 
-bt_wf <- workflow() %>% add_model(bt %>% set_args(trees = tune())) %>% add_formula(minExact ~ pts +oreb+dreb+ast+fg3a+fg3m+blk+pf+tov+fg2a+fg2m+fta+ftm+pctUSG+ortg+drtg+possesions+plusminus+groupStartPosition+pace+tov)
+bt_wf <- workflow() %>% add_model(bt %>% set_args(trees = tune())) %>% add_recipe(min_re)
 
-tree_grid <- grid_regular(trees(range= c(10,2000)),levels = 10)
+tree_grid <- grid_regular(trees(range= c(2,1000)),levels = 10)
+
+
+```
+
+## Random Forest
+```{r}
+rf <- rand_forest() %>% set_engine("ranger", importance = "impurity") %>% set_mode("regression")
+
+rf_wf <- workflow() %>% add_model(rf %>% set_args(mtry = tune(), trees = tune(),min_n = tune())) %>% add_recipe(min_re)
+
+rand_grid <- grid_regular(mtry(range= c(1,20)), trees(range = c(1,1000)), min_n(range = c(1,5)),levels = 8)
 
 
 ```
@@ -186,5 +203,41 @@ tree_grid <- grid_regular(trees(range= c(10,2000)),levels = 10)
 tune_tree <- tune_grid(bt_wf, resamples = starter_folds, grid = tree_grid, metrics = metric_set(roc_auc) )
 
 save(tune_tree, file = "tune_tree.rda")
+
+```
+
+### Tuning
+
+```{r}
+load(file = "tune_elas.rda")
+autoplot(tune_elas)
+```
+
+```{r}
+load(file = "tune_knn.rda")
+autoplot(tune_knn)
+```
+
+```{r}
+load(file = "tune_tree.rda")
+autoplot(tune_tree)
+```
+
+```{r}
+metrics_boost <- collect_metrics(tune_tree) %>% arrange(desc(mean))
+metrics_boost
+best_bt <- select_best(tune_boost)
+
+bt_wf_f <- finalize_workflow(bt_wf,best_bt)
+
+bt_final_fit <- fit(bt_wf_f,starter_train)
+
+rsq <- metric_set(rsq)
+
+min_pred <- predict(bt_final_fit,starter_test) %>%  bind_cols(starter_test %>% select(minExact))
+
+rsq(min_pred, truth = minExact, estimate = .pred)
+
+
 
 ```
