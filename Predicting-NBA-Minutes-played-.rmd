@@ -24,6 +24,7 @@ library(xgboost)
 library(kknn)
 library(randomForest)
 library(ranger)
+
 ```
 Data cleaning
 
@@ -48,9 +49,7 @@ load(file = "box_team.rda")
 load(file = "box_player.rda")
 
 player <- box_player[[2]][[1]]
-#creates observations of only starters
-starters <- player[complete.cases(player$groupStartPosition),]
-starters$groupStartPosition <- as.factor(starters$groupStartPosition)
+player$groupStartPosition[is.na(player$groupStartPosition)] <- "Bench"
 
 
 
@@ -62,12 +61,13 @@ starters$groupStartPosition <- as.factor(starters$groupStartPosition)
   
   
 ```
-Data from this project was scraped from the NBA website using NBAstatR, an R package designed to pull data from various basketball databases on the internet. Here we have taken a subset of 165 games of the 1320 games played in the 2021-2022 NBA season pulling every 8 games from the very start to very finish in the regular season. I then removed the data that had players coming off the bench so I could analyze the minutes played of starters.
+Data from this project was scraped from the NBA website using NBAstatR, an R package designed to pull data from various basketball databases on the internet. Here we have taken a subset of 165 games of the 1320 games played in the 2021-2022 NBA season pulling every 8 games from the very start to very finish in the regular season.
 
 ```{r,fig.dim = c(10,10)}
+#removes ID's from correlation plot 
+player_no_id <- select(player, -c("idTeam","idGame","idPlayer"))
 
-
-correlation <- cor(select_if(starters,is.numeric))
+correlation <- cor(select_if(player_no_id,is.numeric))
 
 
 corrplot(correlation,type = 'lower', diag = FALSE, method='color')
@@ -75,22 +75,25 @@ corrplot(correlation,type = 'lower', diag = FALSE, method='color')
 ```
 Let's take a look at the distribution of minutes played by position.
 ```{r}
-ggplot(starters, aes(minExact)) + geom_histogram(binwidth = 5, fill = "blue", color = "red") + facet_wrap(~groupStartPosition)
+ggplot(player, aes(minExact)) + geom_histogram(binwidth = 5, fill = "blue", color = "red") + facet_wrap(~groupStartPosition)
 
-summary(starters$minExact[starters$groupStartPosition=="C"])
-summary(starters$minExact[starters$groupStartPosition=="F"])
-summary(starters$minExact[starters$groupStartPosition=="G"])
+
+
+summary(player$minExact[starters$groupStartPosition=="C"])
+summary(player$minExact[starters$groupStartPosition=="F"])
+summary(player$minExact[starters$groupStartPosition=="G"])
+summary(player$minExact[starters$groupStartPosition=="Bench"])
 ```
 As we can see, Starters tend to average around 30 minutes of the 48 minutes of playing time in basketball, with a sharp drop-off of observations below 20 minutes and above 35 minutes. Center observations are much lower than centers and forwards since there are 2 guards and 2 forwards on the floor but only 1 center at any given time.
 
 ```{r}
-ggplot(starters,aes(minExact,pts))+ geom_point(aes(colour = cut(fga, c(0.0,5, 10,15,20,35))),size = 5) + facet_wrap(~groupStartPosition) 
+ggplot(player,aes(minExact,pts))+ geom_point(aes(fill = cut(fga, c(0.0,5, 10,15,20,35))),size = 2) + facet_wrap(~groupStartPosition) + #scale_fill_manual("Field Goals Attempted", values = c("0-5" = "Green", "5-10" = "Purple", "10-15" = "Gold", "15-20"="Red","20-35" = ""))
 
 ```
 Basketball is grouped into 3 groups (guards, forwards, centers) and 5 positions (point guard, shooting guard, small forward, power forward, and center). As we can see, the more minutes a player plays there is an upward trajectory in points scored as well as shot attempts. This makes sense as the only way to score points is to shoot field goals or shoot free throws, and to shoot free-throws you need to be fouled which often occurs when a player is trying to make a shot.
 ```{r}
 
-ggplot(starters, aes(minExact,pctFG3)) + geom_point(aes(colour = cut(fg3a,c(-1,0,2, 4,6,8,10,15))),size = 5) + facet_wrap(~groupStartPosition)
+ggplot(player, aes(minExact,pctFG3)) + geom_point(aes(colour = cut(fg3a,c(-1,0,2, 4,6,8,10,15))),size = 5) + facet_wrap(~groupStartPosition) + 
 
 
 ```
@@ -99,13 +102,13 @@ As we can see both 3 point percentage and attempts is very dependent on minutes 
 Scoring is a large part of the NBA but there are some players that play large chunks of minutes in an NBA game that are not known for their scoring prowess. Let's look at rebounds, a stat that counts the number of balls caught after a shot hits the rim or backboard in a game.
 
 ```{r}
-ggplot(starters, aes(minExact,treb, group=minExact, fill=oreb))+ geom_boxplot() + scale_x_discrete(breaks = seq(0,50,5))+facet_wrap(~groupStartPosition)
+ggplot(player, aes(minExact,treb, group=minExact, fill=oreb))+ geom_boxplot() + scale_x_discrete(breaks = seq(0,50,5))+facet_wrap(~groupStartPosition)
 
 ```
 
 ```{r}
 
-ggplot(starters, aes(minExact,netrtg)) + geom_point() + facet_wrap(~groupStartPosition) 
+ggplot(player, aes(minExact,netrtg)) + geom_point() + facet_wrap(~groupStartPosition) 
 
 
 
@@ -117,19 +120,19 @@ Net rating is defined as offensive rating vs defensive rating. Offensive rating 
 ## The Split
 ```{r}
 set.seed(6688)
-starter_split <- initial_split(starters, prop=.7, strata = minExact) 
+player_split <- initial_split(player, prop=.7, strata = minExact) 
 
-starter_train <- training(starter_split)
-starter_test <- testing(starter_split)
+player_train <- training(player_split)
+player_test <- testing(player_split)
 
-starter_folds <- vfold_cv(starter_train, v = 5, stata = minExact)
+player_folds <- vfold_cv(player_train, v = 5, stata = minExact)
 
 ```
 W will now create a 70/30 training vs testing split stratifying on the minutes an NBA player plays, we will then create our recipe using our training data to predict the number of minutes an NBA player plays in a game. A 5 fold cross validation of our training set was also created, which we will use in order to predict which model will preform best at predicting minutes played.
 
 ```{r}
 
-min_re <- recipe(minExact ~ pts+oreb+dreb+ast+fg3a+fg3m+blk+pf+tov+fg2a+fg2m+fta+ftm+pctUSG+ortg+drtg+possessions+plusminus+groupStartPosition+pace+tov+pctTOVTeam, data = starter_train) %>% step_dummy(all_nominal_predictors()) %>% step_normalize(all_numeric_predictors())
+min_re <- recipe(minExact ~ pts+oreb+dreb+ast+fg3a+fg3m+blk+pf+tov+fg2a+fg2m+fta+ftm+pctUSG+ortg+drtg+possessions+plusminus+pace+tov+pctTOVTeam, data = player_train) %>% step_dummy(all_nominal_predictors()) %>% step_normalize(all_numeric_predictors())
 
 
 ```
