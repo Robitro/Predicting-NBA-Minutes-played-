@@ -1,10 +1,13 @@
 ---
 title: "Predicting NBA Minutes played"
 Author: "Robert Miller"
-output: html_document
 date: "2022-12-09"
-code_folding: hide
-toc: true
+output:
+  html_document: 
+    code_folding: hide
+    toc: true
+    toc_float: true
+  
 
 ---
 
@@ -24,9 +27,17 @@ library(xgboost)
 library(kknn)
 library(randomForest)
 library(ranger)
+library(vip)
 
 ```
-Data cleaning
+
+The National Basketball Association, NBA 
+
+
+
+
+
+# Data cleaning
 
 ```{r, eval=FALSE}
 seq <- seq(22100001,22101320,8)
@@ -43,12 +54,14 @@ save(box_player,file = "box_player.rda")
 
 ```
 ```{r}
-
+load(file = "player_no_id.rda" )
 load(file = "box_team.rda")
 
 load(file = "box_player.rda")
 
 player <- box_player[[2]][[1]]
+
+
 
 player$groupStartPosition[is.na(player$groupStartPosition)] <- "Bench"
 player$groupStartPosition[player$groupStartPosition == "C"] <- "Center"
@@ -68,9 +81,11 @@ player$groupStartPosition[player$groupStartPosition == "G"] <- "Guard"
 ```
 Data from this project was scraped from the NBA website using NBAstatR, an R package designed to pull data from various basketball databases on the internet. Here we have taken a subset of 165 games of the 1320 games played in the 2021-2022 NBA season pulling every 8 games from the very start to very finish in the regular season.
 
+# Exploaratory Data Analysis
 ```{r,fig.dim = c(10,10)}
 #removes ID's from correlation plot 
 player_no_id <- select(player, -c("idTeam","idGame","idPlayer"))
+save(player_no_id, file = "player_no_id.rda")
 
 correlation <- cor(select_if(player_no_id,is.numeric))
 
@@ -110,7 +125,7 @@ As we can see both 3 point percentage and attempts is very dependent on minutes 
 Scoring is a large part of the NBA but there are some players that play large chunks of minutes in an NBA game that are not known for their scoring prowess. Let's look at rebounds, a stat that counts the number of balls caught after a shot hits the rim or backboard in a game.
 
 ```{r}
-ggplot(player,aes(minExact, treb, group=minExact, fill=oreb))+ geom_col() + scale_x_discrete(breaks = seq(0,50,5))+facet_wrap(~groupStartPosition)
+ggplot(player,aes(minExact, treb, group=minExact, fill=oreb))+ geom_point()+facet_wrap(~groupStartPosition)
 
 ```
 
@@ -148,7 +163,7 @@ min_re <- recipe(minExact ~ pts+oreb+dreb+ast+fg3a+fg3m+blk+pf+tov+fg2a+fg2m+fta
 Here's our recipe for predicting minutes played. We're using points scored, offensive and defensive rebounds, assists(where a player passes a ball to another player who score a basket),3 points attempted and made, blocks, personal fouls (6 fouls will result in ejection), turnovers, 2 pointers attempted and made, free throws attempted and made, Usage rate(the percent of possessions where the player is involved in the play), Offensive and Defensive rating, the number of possessions, box plus minus (a measure where 0 is league average positive is the number of extra points per 100 possessions and negative is the number of points given up above average), starting position,and turnovers(losing the ball to the other team) and percentage of turnovers commited by the player from total team turnovers.
 
 
-#### Model Setup
+# Model Setup
 
 
 ## Elastic Net
@@ -212,24 +227,81 @@ rand_grid <- grid_regular(mtry(range= c(1,20)), min_n(range = c(1,5)),levels = 8
 
 
 
-### Tuning
+# Tuning
 
 ```{r}
 load(file = "tune_elas.rda")
 autoplot(tune_elas)
+elas_metrics <- show_best(tune_elas,"rmse")
+best_elas <- select_best(tune_elas,"rmse")
+elas_metrics
+best_elas
 ```
+It appears that Elastic Net Model 95, a lasso regression model with a penalty of .2783 produces an RMSE of 1.5637. It is interesting as I would've though a mixture of lasso and ridge would preform best.
 
 ```{r}
 load(file = "tune_knn.rda")
 autoplot(tune_knn)
+knn_metrics <- show_best(tune_knn,"rmse")
+best_knn <- select_best(tune_knn,"rmse")
+best_knn
+knn_metrics
+
 ```
+ KNN Model 6, A 28 nearest neighbor model weighted with the biweight function produced the lowest RMSE with 3.3310.
 
 ```{r}
-load(file = "tune_tree.rda")
-autoplot(tune_tree)
+load(file = "tune_boost.rda")
+autoplot(tune_boost)
+boost_metrics <- show_best(tune_boost,"rmse")
+best_boost <- select_best(tune_boost,"rmse")
+boost_metrics
+best_boost
 ```
+Boosted tree model 20, a 1000 tree model with a tree depth of 2 produced the lowest RMSE with .3665.
 
 ```{r}
+load(file = "tune_rand.rda")
+autoplot(tune_rand)
+rand_metrics <- show_best(tune_rand,"rmse")
+best_rand <- select_best(tune_rand,"rmse")
+rand_metrics
+best_rand
+
+```
+Random Forest model 24, a model that used all 20 predictors to use its trees and had a minimum of 3 nodes produced the lowest RMSE with .4494.
+
+
+# Congratulations Boosted Tree Model 20!!! 
+
+Our Boosted tree Model 20, a 1000 tree model with a tree depth of 2 performed best out of the 812 total models across our four model types. With an RMSE value of .3665, it was .0829 lower than our best random forest model, 1.197 lower RMSE than the best elastic net model, and a huge 2.9645 lower RMSE than our best KNN model. Our Boosted tree model fit a 2 level pruned decision tree and weighted features it found important. Let's finalize our workflow and fit our model to the testing set.
+
+### Fitting Boosted Tree Model 20 to our testing set
+```{r}
+
+bt_wf_f <- finalize_workflow(bt_wf,best_boost)
+
+min_train_fit <- fit(bt_wf_f, data = player_train)
+
+min_test_fit <- fit(bt_wf_f, data = player_test)
+
+player_test_pred <- augment(min_test_fit,player_test)
+player_train_pred <- augment(min_train_fit,player_train)
+
+
+rsq <- metric_set(rsq)
+rmse <- metric_set(rmse)
+
+rsq(player_test_pred, truth = minExact, estimate = .pred)
+rmse(player_test_pred, truth = minExact, estimate = .pred)
+
+rsq(player_train_pred, truth = minExact, estimate = .pred)
+rmse(player_train_pred, truth = minExact, estimate = .pred)
+
+```
+Our model returned an RSQ value of .9999 and a  Root Mean Squared Error of .0965 on our test data, and an RSQ value of .9997 and a RMSE of .1639.   
+
+```{r,eval = FALSE}
 metrics_boost <- collect_metrics(tune_tree) %>% arrange(desc(mean))
 metrics_boost
 best_bt <- select_best(tune_boost)
@@ -244,6 +316,6 @@ min_pred <- predict(bt_final_fit,starter_test) %>%  bind_cols(starter_test %>% s
 
 rsq(min_pred, truth = minExact, estimate = .pred)
 
-
+rmse(min_pred, truth = minExact, estimate = .pred)
 
 ```
