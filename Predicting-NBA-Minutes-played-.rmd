@@ -1,6 +1,6 @@
 ---
-title: "Predicting NBA Minutes played"
-Author: "Robert Miller"
+title: "Predicting NBA Minutes played in the 2021-2022 Regular Season"
+author: "Robert Miller"
 date: "2022-12-09"
 output:
   html_document: 
@@ -11,9 +11,8 @@ output:
 
 ---
 
-```{r setup, include=FALSE}
+```{r setup, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo = TRUE,fig.width = 10, fig.height = 5)
-
 
 devtools::install_github("abresler/nbastatR")
 library(nbastatR)
@@ -30,11 +29,14 @@ library(ranger)
 library(vip)
 library(MLmetrics)
 
+
+
 ```
 
-The National Basketball Association, NBA for short, is the largest basketball league in the entire world as well as one of the largest sports leagues. Basketball in the NBA is divided into four 12 minute quarters, with overtime if necessary of 5 minutes.There are no ties in the NBA so overtime will go until there is a winner at the end of the period. A shot must be made within 24 seconds of a team having possession of the ball and the shot clock will reset to 14 seconds if the offensive team gets an offensive rebound(the shot must hit the rim of the basket though). Only 5 players can be on the court at anytime. Players can substitute into the game any time the ball is not in play. Each basketball team is awarded 6 timeouts, only a player can call a timeout when the ball is in play, but a coach can call a timeout when the ball is out of play. 
 
-In this project I look to predict minutes played by a player in a regular season NBA game using stats found in both regular and advanced player game stats. Data from this project was scraped from the NBA.com website using NBAstatR, an R package designed to pull data from various basketball databases on the internet. Here we have taken a subset of 165 games of the 1320 games played in the 2021-2022 NBA season selecting player game stats from every 8th game from the very start to very finish in the regular season. The dataset includes 3289 player box score observations with 54 columns total, every player that played any amount of time in the games we have selected. Here are some basic explanations about the stats we are using:
+The National Basketball Association, NBA for short, is the largest basketball league in the entire world as well as one of the largest sports leagues. Basketball in the NBA is divided into four 12 minute quarters, with overtime if necessary of 5 minutes.There are no ties in the NBA so overtime will go until there is a winner at the end of the period. A shot must be made within 24 seconds of a team having possession of the ball and the shot clock will reset to 14 seconds if the offensive team gets an offensive rebound(the shot must hit the rim of the basket though). Only 5 players can be on the court at anytime. Players can substitute into the game any time the ball is not in play. 
+
+In this project I look to predict minutes played by a player in a 2021-2022 regular season NBA game using stats found in both traditional and advanced player game stats. Data from this project was scraped from the NBA.com website using NBAstatR, an R package designed to pull data from various basketball databases on the internet. Here we have taken a subset of 165 games of the 1320 games played in the 2021-2022 NBA season selecting player game stats from every 8th game from the very start to very finish in the regular season. The dataset includes 3289 player box score observations with 54 columns total, every player that played any amount of time in the games we have selected. Here are some basic explanations about the stats we are using:
 
 Minutes(`minExact`): Minutes and seconds played in a NBA game.
 
@@ -65,7 +67,7 @@ Starting Position(`groupStartPosition`): Basketball positions fall is 3 groups (
 
 points(`pts`): when the basketball enters the basket points are scored. If the basketball is made inside the 3 point line, 2 points are scored, outside the 3 point line, 3 points are scored. A player can also score one point from free throws.
 
-Rebounds: When the ball comes off of the backboard after a shot attempt and a player catches it he is awarded a rebound. These can be Offensive(`oreb`) or defensive(`dreb`).
+Rebounds(`treb`): When the ball comes off of the backboard after a shot attempt and a player catches it he is awarded a rebound. These can be Offensive(`oreb`) or defensive(`dreb`).
 
 Offensive rebound(`oreb`): when the offensive team rebounds the ball.
 
@@ -107,7 +109,7 @@ load(file = "player_no_id.rda" )
 
 load(file = "box_player.rda")
 
-player <- box_player[[2]][[1]]
+player <- box_player
 
 
 
@@ -213,7 +215,7 @@ We will now create a 70/30 training vs testing split stratifying on the minutes 
 
  
 
-## The recipe
+## The recipes
 ```{r}
 min_re <- recipe(minExact ~ pts+oreb+dreb+ast+fg3a+fg3m+blk+pf+tov+fg2a+fg2m+fta+ftm+groupStartPosition+tov+pctTOVTeam+drtg+ortg+possessions, data = player_train) %>% step_dummy(all_nominal_predictors()) %>% step_center(all_numeric_predictors()) %>% step_scale(all_numeric_predictors())
 
@@ -309,7 +311,7 @@ rand_grid_trad <- grid_regular(mtry(range= c(1,15)), min_n(range = c(1,10)),leve
 `mtry` is the number of randomly selected features and we will be tuning that from 1-19. we will also tune `min_n` from 1-10. since we have less features, our grid for our traditional statistic model only has a `mtry` from 1-15. Trees were selected to be large enough but not too large to be inefficient. we will be using the `ranger` engine. 
 
 
-# Model Tuning
+# Model Tuning(Original Recipe)
 
 Below we will be plotting and selecting the models with the lowest Root Mean Squared error when preformed cross-validation. I have created separate R scripts and save the results in rda files. We will also look at the 5 best performing models of each model type.
 
@@ -360,7 +362,7 @@ best_rand
 Random Forest model 97, a model that used a subset of 13 predictors in its trees and had a minimum of 10 nodes produced the lowest RMSE with 1.3237. Large subsets of predictors and large minimum number of nodes did best.
 
 
-# Results
+# Results(Orginal Recipe)
 
  
 
@@ -440,7 +442,7 @@ best_rand_trad
 ```
 Random Forest model 66, a model that used a subset of 8 predictors in its trees and had a minimum of 7 nodes produced the lowest RMSE with 4.4781.
 
-# Results(Traditional Statistics)
+# Results(Only Traditional Statistics)
 
 Boosted tree model 12, a 112 tree model with a node depth of 2, produced an RMSE of 4.4434. It performed best out of the 340 total models across our four model types. With an RMSE value of 4.4434, RMSE was .0347 lower than our best random forest model, .5947 lower RMSE than our best elastic net model, and .1485 lower RMSE than our best KNN model. Interestingly, our Elastic net model went from our best model with the possession stats to our worst performing model. This makes sense as elastic net is essentially regression but with modified coefficients. Our KNN model saw a huge jump in performance most likely due to the non-parametric distribution of our underlying data. Now,let's finalize our workflow and fit our model to the testing set.
 
@@ -479,6 +481,6 @@ MAPE_test_trad
 In conclusion I used MAPE(Mean absolute percentage error) to determine the average percentage each recipe type was off by, the MAPE of our original recipe was 6.30%, so on average our predictions were off by 6.295%. Our recipe using only traditional stats fared much worse though with a MAPE of 20.70%, so on average our predictions were off by 20.70%. According to (https://stephenallwright.com/good-mape-score/), a good rule of thumb is that a very good model has a less than <10% MAPE, 10-20% MAPE is good and 20-50% is ok. So you original model did a very good job at predicting minutes played, while our model only using traditional metrics fared much worse with a mediocre prediction rate. Looking into our data it appears that the error of our players that played few minutes is relatively large, as due to a small sample size of their stats a player can score a few points or grab a few rebounds and appear to have played more minutes to the model than in actuality. The same goes for our model with traditional stats but magnified. Players that played small amounts of minutes would have their predicted minutes doubled if not more, in higher values though our model is much better at accurately predicting minutes played.
 
 
-## A Special Thanks to
+# A Special Thanks to
 
-Thank you to abresler on github, who created nbastatR the API that helped scrape the data for this project. Thank you to the NBA and NBA.com and the statisticians that record and upload these game stats. Thank you to basketballreference.com for having easily searchable stats. Thank you to Stephenall Wright for his article about MAPE scores.    
+Thank you to abresler on github, who created nbastatR the API that helped scrape the data for this project. Thank you to the NBA and NBA.com and the statisticians that record and upload these game stats. Thank you to basketballreference.com for having easily searchable stats. Thank you to Stephenall Wright for his article about MAPE scores. And last but not least thank you to Dr. Coburn, Hanmo and everyone that helped teach this class!!   
