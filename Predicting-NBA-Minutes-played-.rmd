@@ -101,6 +101,7 @@ player_no_id <- select(player, -c("idTeam","idGame","idPlayer"))
 save(player_no_id, file = "player_no_id.rda")
 
 
+
 ```
 
 ## Data Cleaning
