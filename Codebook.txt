@@ -1,0 +1,41 @@
+idGame: Unique ID for game
+cityTeam: Name of City team plays in
+slugTeam:  3 letter abbreviation of team
+namePlayer: First and last name of player
+teamName: First name of player 
+groupStartPosition: C(center),G(guard),F(forward) if NA, the player comes off the bench
+idTeam: Unique ID for team
+idPlayer: Unique ID for player
+fgm:field goal made
+fga:field goal attempted
+pctFG: percentage of field goals made fgm/fga
+fg3m: 3 pt fg made
+fg3a: 3 pt fg attempted
+pctFG3: percentage of 3 pt fg made fg3m/fg3a
+fg2m: 2 pt fg made
+fg2a: 2 pt fg attempted
+pctFG2: percentage of 2 pt fg made fg2m/fg2a
+ftm: free throw made
+fta: free throw attempted
+pctFT: percentage of free throws made ftm/fta
+minExact: Minutes and seconds played
+oreb:offensive rebounds
+dreb:defensive rebounds
+treb: total rebounds (oreb+dreb)
+ast: assists
+stl: steals
+blk: blocks
+tov: turnovers
+pf: personal fouls
+pts: points
+pctTOVTeam: Percentage of team turnovers commited by player (tov/team turnovers)
+ortg: offensive rating
+drtg: defensive rating
+netrtg: net rating (ortg - drtg)
+ratioASTtoTOV: assist to turnover ratio (ast/tov)
+possessions: number of possessions player is on the floor for
+pace: possessions per 48 minutes
+
+
+
+

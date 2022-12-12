@@ -28,34 +28,82 @@ library(kknn)
 library(randomForest)
 library(ranger)
 library(vip)
+library(MLmetrics)
 
 ```
 
-The National Basketball Association, NBA 
+The National Basketball Association, NBA for short, is the largest basketball league in the entire world as well as one of the largest sports leagues. Basketball in the NBA is divided into four 12 minute quarters, with overtime if necessary of 5 minutes.There are no ties in the NBA so overtime will go until there is a winner at the end of the period. A shot must be made within 24 seconds of a team having possession of the ball and the shot clock will reset to 14 seconds if the offensive team gets an offensive rebound(the shot must hit the rim of the basket though). Only 5 players can be on the court at anytime. Players can substitute into the game any time the ball is not in play. Each basketball team is awarded 6 timeouts, only a player can call a timeout when the ball is in play, but a coach can call a timeout when the ball is out of play. 
+
+In this project I look to predict minutes played by a player in a regular season NBA game using stats found in both regular and advanced player game stats. Data from this project was scraped from the NBA.com website using NBAstatR, an R package designed to pull data from various basketball databases on the internet. Here we have taken a subset of 165 games of the 1320 games played in the 2021-2022 NBA season selecting player game stats from every 8th game from the very start to very finish in the regular season. The dataset includes 3289 player box score observations with 54 columns total, every player that played any amount of time in the games we have selected. Here are some basic explanations about the stats we are using:
+
+Minutes(`minExact`): Minutes and seconds played in a NBA game.
+
+Personal Foul(`pf`): If a referee judges that a foul is committed(contact that would hinder scoring or defending the basket) a personal foul is assigned. It can be a shooting foul(free throws for the fouled player) or a non_shooting foul(no free throws), 6 personal fouls result in ejection. An Offensive foul results in a turnover.
+
+blocks(`blk`): When a player gets his hand on the basketball while in the air after a field goal attempt.
+
+Field Goal Attempt: When a player shoots the basketball a field goal attempt is counted, it is divided between 2 point attempts(`fg2a`) (shot inside of the 3 point line: 22 feet at the corners and 23 feet 9 inches away everywhere else) and 3 point attempts(`fg3a`). 
+
+2 Point Field Goal Attempt(`fg2a`): A shot inside the 3 point line.
+
+3 Point Field Goal Attempt(`fg3a`): A shot outside the 3 point line.
 
 
+Field Goal Make: If a 2 point attempt goes in the basket a 2 pointer is scored (`fg2m`), If a 3 point attempt goes in the basket a 3 pointer is scored (`fg3m`).
+
+2 Point Field Goal Make(`fg2m`): A shot made inside the 3 point line.
+
+3 Point Field Goal Make(`fg3m`): A shot made outside the 3 point line.
+
+Free Throw Attempt(`fta`): When a player is fouled in the act of shooting or the bonus is met(5 team personal fouls in the quarter), the fouled player will shoot free throws.The player will take free throws from the free throw line (15 feet away).Time is stopped and the player will shoot without contact. One point is awarded for a free throw make. 2 free throws will be shot if the player is fouled on a 2 point attempt or is not shooting and is in the bonus. 3 free throws will be shot if a player is fouled on a shot outside the 3 point line. If the player makes a field goal and is also fouled, The field goal counts and an extra free throw is awarded.
+
+Free Throw Make(`ftm`): A made free throw attempt.
+
+Turnover(`tov`): When a player awards the ball to the other team (other team takes the ball, ball goes out of bounds, player commits an offensive foul).
+
+Starting Position(`groupStartPosition`): Basketball positions fall is 3 groups (guards, forwards, centers) and 5 positions (point guard, shooting guard, small forward, power forward, and center). Guards are often smallest players and are traditionally responsible for the passing (point guard) and shooting (shooting guard) abilities of a team. Forwards are typically in between the heights of guards and centers and are responsible for taking shots closer to the rim than guards. A small forward is more likely to shoot then a power forward or center while a power forward may shoot near the basket like a center but may not be as tall. A center is typically the largest player on the team, known for taking shots near the basket, blocking shots and playing good defense. Bench player are players not in the starting 5 lineup, they still have positions like starters but are often not good enough to play large chunks of the game.
+
+points(`pts`): when the basketball enters the basket points are scored. If the basketball is made inside the 3 point line, 2 points are scored, outside the 3 point line, 3 points are scored. A player can also score one point from free throws.
+
+Rebounds: When the ball comes off of the backboard after a shot attempt and a player catches it he is awarded a rebound. These can be Offensive(`oreb`) or defensive(`dreb`).
+
+Offensive rebound(`oreb`): when the offensive team rebounds the ball.
+
+Defensive rebound(`dreb`): when the defensive team rebounds the ball.
+
+assists(`ast`): When a player passes the ball to another player who then shoots it, an assist is awarded to the passing player.
+
+Possession(`possessions`): When a player is holding, dribbling or passing the ball.
+
+Offensive Rating(`ortg`): Offensive rating is a measure of how many points are scored by the player per 100 possessions of the basketball.
+
+Defensive Rating(`drtg`):Defensive Rating is a measure of how many points a player gives up on defense per 100 possessions.
+
+Net Rating(`ntrtg`): defined as offensive rating(`ortg`) minus defensive rating(`drtg`). If more points are scored then given up, this will result in a positive net rating.
+
+Player turnover percentage(`pctTOVTeam`): The percentage of player turnovers. Player turnovers divided by  team turnovers.
 
 
+# Data Scraping and Cleaning
 
-# Data cleaning
-
+## Data Scraping
 ```{r, eval=FALSE}
 seq <- seq(22100001,22101320,8)
-box_team<- box_scores(seq,box_score_types = c("Traditional", "Advanced"),result_types = "team", join_data = TRUE) 
-
-get_seasons_rosters(seasons = 2021:2022, return_message = TRUE, nest_data = F)
-
-save(box_team,file="box_team.rda")
 
 box_player <-  box_scores(seq,box_score_types = c("Traditional", "Advanced"),result_types = "player", join_data = TRUE)
+
+box_player <- select(box_player[[2]][[1]],-c(isStarter,plusminus,pctAST:pctTREB,pctEFG:ortgE,drtgE,netrtgE,ratioAST,paceE,pacePer40PACE_PER40,ratioPIE))
 save(box_player,file = "box_player.rda")
 
+player_no_id <- select(player, -c("idTeam","idGame","idPlayer"))
+save(player_no_id, file = "player_no_id.rda")
 
 
 ```
+
+## Data Cleaning
 ```{r}
 load(file = "player_no_id.rda" )
-load(file = "box_team.rda")
 
 load(file = "box_player.rda")
 
@@ -68,24 +116,13 @@ player$groupStartPosition[player$groupStartPosition == "C"] <- "Center"
 player$groupStartPosition[player$groupStartPosition == "F"] <- "Forward"
 player$groupStartPosition[player$groupStartPosition == "G"] <- "Guard"
 
-
-
-
-
-
-
-
-
-  
-  
 ```
-Data from this project was scraped from the NBA website using NBAstatR, an R package designed to pull data from various basketball databases on the internet. Here we have taken a subset of 165 games of the 1320 games played in the 2021-2022 NBA season pulling every 8 games from the very start to very finish in the regular season.
+The data was very clean being official NBA stats, but for `groupStartPosition` bench players were assigned `NA`, I changed that as well as changed the abbreviations into full position group name. 
 
-# Exploaratory Data Analysis
+# Exploratory Data Analysis
+
+## Correlation Plot
 ```{r,fig.dim = c(10,10)}
-#removes ID's from correlation plot 
-player_no_id <- select(player, -c("idTeam","idGame","idPlayer"))
-save(player_no_id, file = "player_no_id.rda")
 
 correlation <- cor(select_if(player_no_id,is.numeric))
 
@@ -93,9 +130,11 @@ correlation <- cor(select_if(player_no_id,is.numeric))
 corrplot(correlation,type = 'lower', diag = FALSE, method='color')
 
 ```
-Let's take a look at the distribution of minutes played by position.
-```{r}
-ggplot(player, aes(minExact)) + geom_histogram(binwidth = 5, fill = "blue", color = "red") + facet_wrap(~groupStartPosition)
+Our Correlation plot shows  large positive correlation between `minExact` and `possesions` as well as `minExact` and `pts`. `dreb`, `treb`, `ast`, `blk` also show positive correlation with `minExact`
+
+## Distribution of Minutes Played by Position 
+```{r,fig.dim = c(8.4,6)}
+ggplot(player, aes(minExact)) + geom_histogram(binwidth = 5, fill = "blue", color = "red") + facet_wrap(~groupStartPosition) +labs(title = "Distribution of Minutes played")
 
 
 
@@ -106,39 +145,58 @@ summary(player$minExact[player$groupStartPosition=="Bench"])
 ```
 As we can see, Starters tend to average around 30 minutes of the 48 minutes of playing time in basketball, with a sharp drop-off of observations below 20 minutes and above 35 minutes. Center observations are much lower than centers and forwards since there are 2 guards and 2 forwards on the floor but only 1 center at any given time. For players coming off of the bench, the observations are skewed towards lower minutes (as they are often not good enough to play lots of minutes).
 
-```{r}
+
+## Plot of Minutes Played, Points Scored, and Field Goals Attempted
+
+Here we will plot Minutes played versus points with the number of field goals attempted colored.
+```{r,fig.dim = c(8.4,6)}
 ggplot(player,aes(minExact,pts)) + geom_point(aes(colour = cut(fga,c(-Inf,5,10,15,20,25,35,Inf))),size = 2) + facet_wrap(~groupStartPosition) + scale_color_manual(name = "Field Goals Attempted", 
-values = c("green", "yellow", "orange", "blue", "violet","red"),
-labels = c("0-5", "5-10", "10-15", "15-20","20-25","> 25"))
+values = c("#003f5c", "#444e86", "#955196", "#dd5182", "#ff6e54","#ffa600"),
+labels = c("0-5", "5-10", "10-15", "15-20","20-25","> 25")) + labs(title = "Relation of Minutes Played and Points Scored")
 ```
-Basketball is grouped into 3 groups (guards, forwards, centers) and 5 positions (point guard, shooting guard, small forward, power forward, and center). As we can see, the more minutes a player plays there is an upward trajectory in points scored as well as shot attempts. This makes sense as the only way to score points is to shoot field goals or shoot free throws, and to shoot free-throws you need to be fouled which often occurs when a player is trying to make a shot. Bench players tend to shoot less field goals and guards seem to shoot the most.
-```{r}
+As we can see, the more minutes a player plays there is an upward trajectory in points scored as well as shot attempts.Bench players tend to shoot less field goals and guards seem to shoot the most.
 
-ggplot(player, aes(minExact,pctFG3)) + geom_point(aes(colour = cut(fg3a,breaks = c(-Inf,0,1,2,4,6,8,10,Inf))),size = 2) + facet_wrap(~groupStartPosition) + scale_color_manual(name = "3 Point Field Goals Attempted", 
-values = c("purple","pink","green", "yellow", "orange", "blue", "violet","red"),
-labels = c("0", "1", "1-2", "2-4", "4-6","6-8","8-10", "> 10"))
+## Plot of 3 point Field goals made and Minutes Played 
 
+Now we will graph 3 points field goals made and minutes played with the number of 3 point attempts colored.
+```{r,fig.dim = c(8.4,6)}
 
-```
-As we can see both 3 point percentage and attempts is very dependent on minutes played. Centers shoot far fewer threes than guards and  forwards as a result of their often larger size prefer to shoot around the rim. Furthermore, We can also see that as minutes increase there is a decrease in 3 point efficiency. There are bands around 0%,50%, 100% is usally a result of players taking only a couple threes and hitting or missing all of them. In the 2021-2022 season the league wide average shooting percentage was 35.4% (source:basketballreference.com)
-
-Scoring is a large part of the NBA but there are some players that play large chunks of minutes in an NBA game that are not known for their scoring prowess. Let's look at rebounds, a stat that counts the number of balls caught after a shot hits the rim or backboard in a game.
-
-```{r}
-ggplot(player,aes(minExact, treb, group=minExact, fill=oreb))+ geom_point()+facet_wrap(~groupStartPosition)
-
-```
-
-```{r}
-
-ggplot(player, aes(minExact,netrtg)) + geom_point() + facet_wrap(~groupStartPosition) 
-
+ggplot(player, aes(minExact,fg3m)) + geom_point(aes(colour = cut(fg3a,breaks = c(-Inf,0,1,2,4,6,8,10,Inf))),size = 2) + facet_wrap(~groupStartPosition) + scale_color_manual(name = "3 Point Field Goals Attempted", 
+values = c("#003f5c","#2f4b7c","#665191", "#a05195", "#d45087", "#f95d6a", "#ff7c43","#ffa600"),
+labels = c("0", "1", "1-2", "2-4", "4-6","6-8","8-10", "> 10")) + labs(title = "Relation of 3 Point Field Goals Made and Minutes Played")
 
 
 ```
+As we can see both 3 points made and attempts is very dependent on minutes played.It seems the more minutes played the more 3 pointers shot. This is especially apparent with bench players. Centers shoot far fewer threes than guards and forwards as a result of their often larger size prefer to shoot around the rim. guards shoot and make more threes than forwards as evidenced by the larger bands at the higher values and the low amount of dark colors. 
 
-Net rating is defined as offensive rating vs defensive rating. Offensive rating is a measure of how may points are scored by the player per 100 possessions of the basketball and defensive rating is measure of how many points they give up on defense per 100 possessions. If more points are scored then given up, this will result in a positive net rating. The best players often average a high positive net rating, for example Nikola Jokic: a 6'11 Serbian Center that plays for the Denver Nuggets averaged net ratings of 14.8 in 20-21 season and 10.4 in 21-22 season (source:basketballreference.com), earning him back to back most valuable player awards. High net ratings may be a good predictor of many minutes played, but astronomically high or low net ratings are a result of a small sample size which may be a good predictor for players playing few minutes.
+ 
+## Plot of Possessions and Minutes Played
 
+Here we plot possessions versus minutes played with turnovers colored.
+```{r,fig.dim = c(8.4,6)}
+ggplot(player,aes(minExact, possessions))+ geom_point(aes(colour = cut(tov,breaks = c(-Inf,0,1,2,3,4,5,6,Inf))),size = 2)+facet_wrap(~groupStartPosition)+ scale_color_manual(name = "Turnovers", 
+values = c("#003f5c","#2f4b7c","#665191", "#a05195", "#d45087", "#f95d6a", "#ff7c43","#ffa600"),
+labels = c("0", "1", "2", "3", "4","5","6", ">6")) + labs(title = "Relation of Possessions and Minutes Played")
+
+```
+Surprisingly, there is a near linear correlation between possessions and minutes played. it seems that there is a near perfect correlation with 2 possessions equal to 1 minute played. I have also plotted the amount of turnovers on the color scale and found that Bench players are far less likely to turn the ball over per possession, this may be due to bench players more like to just catch the ball and shoot rather than holding on to the ball. Guards, on the other hand, seem to have much higher turnover rates per possession due to them being primary ball handlers. 
+
+## Plot of Net Rating and Minutes Played
+
+Here we will plot Net Rating versus minutes played with positive net ratings colored green and negative net ratings colored red.
+```{r,fig.dim = c(8.4,6)}
+
+ggplot(player, aes(minExact,netrtg)) + geom_point(aes(colour = cut(netrtg,breaks = c(-Inf,0,Inf)))) + facet_wrap(~groupStartPosition)+ scale_color_manual(name = "Net rating", 
+values = c("red","green"),
+labels = c("Negative","positive" )) + labs(title = "Relation of Net Rating and Minutes Played")  
+
+
+
+```
+
+The best players often average a high positive net rating, for example Nikola Jokic: a 6'11 Serbian Center that plays for the Denver Nuggets averaged net ratings of 14.8 in 20-21 season and 10.4 in 21-22 season (source:basketballreference.com), earning him back to back most valuable player awards. High net ratings may be a good predictor of many minutes played, but astronomically high or low net ratings are a result of a small sample size which may be a good predictor for players playing few minutes. Average net ratings for high minutes played tend to zero as players as swings of poor performance and great performance average out.
+
+# Spliting data and recipe building
 
 ## The Split
 ```{r}
@@ -151,22 +209,29 @@ player_test <- testing(player_split)
 player_folds <- vfold_cv(player_train, v = 5, stata = minExact)
 
 ```
-We will now create a 70/30 training vs testing split stratifying on the minutes an NBA player plays, we will then create our recipe using our training data to predict the number of minutes an NBA player plays in a game. A 5 fold cross validation of our training set was also created, which we will use in order to predict which model will preform best at predicting minutes played.
+We will now create a 70/30 training vs testing split stratifying on the minutes an NBA player plays, we will then create our recipe using our training data to predict the number of minutes an NBA player plays in a game. A 5 fold cross validation of our training set was also created, which we will use in order to predict which model in each class will preform best at predicting minutes played.
 
+ 
+
+## The recipe
 ```{r}
+min_re <- recipe(minExact ~ pts+oreb+dreb+ast+fg3a+fg3m+blk+pf+tov+fg2a+fg2m+fta+ftm+groupStartPosition+tov+pctTOVTeam+drtg+ortg+possessions, data = player_train) %>% step_dummy(all_nominal_predictors()) %>% step_center(all_numeric_predictors()) %>% step_scale(all_numeric_predictors())
 
-min_re <- recipe(minExact ~ pts+oreb+dreb+ast+fg3a+fg3m+blk+pf+tov+fg2a+fg2m+fta+ftm+pctUSG+ortg+drtg+possessions+plusminus+pace+tov+pctTOVTeam, data = player_train) %>% step_dummy(all_nominal_predictors()) %>% step_center(all_numeric_predictors()) %>% step_scale(all_numeric_predictors())
+min_re_trad <- recipe(minExact ~ pts+oreb+dreb+ast+fg3a+fg3m+blk+pf+tov+fg2a+fg2m+fta+ftm+groupStartPosition+tov, data = player_train) %>% step_dummy(all_nominal_predictors()) %>% step_center(all_numeric_predictors()) %>% step_scale(all_numeric_predictors())
 
 
 ```
 
-Here's our recipe for predicting minutes played. We're using points scored, offensive and defensive rebounds, assists(where a player passes a ball to another player who score a basket),3 points attempted and made, blocks, personal fouls (6 fouls will result in ejection), turnovers, 2 pointers attempted and made, free throws attempted and made, Usage rate(the percent of possessions where the player is involved in the play), Offensive and Defensive rating, the number of possessions, box plus minus (a measure where 0 is league average positive is the number of extra points per 100 possessions and negative is the number of points given up above average), starting position,and turnovers(losing the ball to the other team) and percentage of turnovers commited by the player from total team turnovers.
+Here's our recipe for predicting minutes played. We're using points scored, offensive and defensive rebounds, assists(where a player passes a ball to another player who score a basket),3 points attempted and made, blocks, personal fouls (6 fouls will result in ejection), turnovers, 2 pointers attempted and made, free throws attempted and made, Offensive and Defensive rating, the number of possessions,starting position, turnovers(losing the ball to the other team) and percentage of turnovers committed by the player from total team turnovers. We used `step_dummy` to dummy code categorical variables, and center and scale all numeric predictors. I've also created a recipe that predicts minutes played without any statistics that use only traditional stats, no stats with possessions in their calculations because I want to see how our model will do without such a linearly related feature in it. 
 
 
 # Model Setup
 
+We know begin setting up our models, for all of our models we will be tuning parameters and making sure the modes are set to `regression`. we will be creating workflows for each of our models, and creating grids of tuning parameters that we will use with when we do cross-validation to determine the best model for our dataset.I have also created our workflows for our traditional statistic variants of our model.
+
 
 ## Elastic Net
+
 ```{r}
 en <- linear_reg(penalty = tune(),mixture = tune()) %>% set_mode("regression") %>% 
   set_engine("glmnet")
@@ -176,10 +241,14 @@ en_wflow <- workflow() %>%
   add_model(en) %>% 
   add_recipe(min_re)
 
+en_wflow_trad <- workflow() %>% 
+  add_model(en) %>% 
+  add_recipe(min_re_trad)
+
 en_grid <- grid_regular(penalty(c(-5,5)),mixture(c(0,1)),levels = 10)
 
 ```
-The first model we will fit will be elastic net regression, a regularized regression model which combines ridge and lasso coefficients to fit a linear model on our data. We are tuning our penalty model from -5-5 and our mixture from 0-1, a mixture of 1 represents pure lasso regression and a mixture of 0 represents pure ridge regression. 
+The first model we will fit will be elastic net regression, a regularized regression model which combines ridge and lasso coefficients to fit a linear model on our data. We are tuning our `penalty` model from -5-5 and our `mixture` from 0-1, a `mixture` of 1 represents pure lasso regression and a `mixture` of 0 represents pure ridge regression. We will be using the `glmnet` engine.
 
 
 ## K-Nearest Neighbors
@@ -197,11 +266,16 @@ knn_wflow <-
   add_model(knn) %>% 
   add_recipe(min_re)
 
-knn_grid <- grid_regular(neighbors(c(1,50)),weight_func(c("rectangular", "triangular", "epanechnikov", "biweight", "triweight", "cos", "inv", "gaussian", "rank", "optimal")),levels= 10)
+knn_wflow_trad <-
+  workflow() %>% 
+  add_model(knn) %>% 
+  add_recipe(min_re_trad)
+
+knn_grid <- grid_regular(neighbors(c(1,100)),weight_func(c("rectangular", "triangular", "epanechnikov", "biweight", "triweight", "cos", "inv", "gaussian", "rank", "optimal")),levels= 10)
 
 
 ```
-k-nearest neighbors works by looking at the k closest data points and works to assign a value similar to those data points. We are tuning the model by the number of neighbors from 1-50, and all of the possible weight functions to determine the optimal KNN model for our dataset.
+k-nearest neighbors works by looking at the k closest data points and works to assign a value similar to those data points. We are tuning the model by the number of `neighbors` from 1-100, and all of the possible `weight func` (weight functions) to determine the optimal KNN model for our dataset. we will be using the `kknn` engine.
 
 ## Boosted Trees
 ```{r}
@@ -209,26 +283,37 @@ bt <- boost_tree() %>% set_engine("xgboost") %>% set_mode("regression")
 
 bt_wf <- workflow() %>% add_model(bt %>% set_args(trees = tune(), tree_depth = tune())) %>% add_recipe(min_re)
 
+bt_wf_trad <- workflow() %>% add_model(bt %>% set_args(trees = tune(), tree_depth = tune())) %>% add_recipe(min_re_trad)
+
 tree_grid <- grid_regular(trees(range= c(2,1000)), tree_depth(range = c(1,10)),levels = 10)
 
 
 ```
+For our boosted trees model, we are tuning `trees` from 2-1000, and `tree_depth` from 1-10 nodes. we will be using the using the `xgboost` engine.
 
 ## Random Forest
 ```{r}
-rf <- rand_forest() %>% set_engine("ranger", importance = "impurity") %>% set_mode("regression")
+rf <- rand_forest() %>% set_engine("ranger") %>% set_mode("regression")
 
 rf_wf <- workflow() %>% add_model(rf %>% set_args(mtry = tune(), trees = 128 ,min_n = tune())) %>% add_recipe(min_re)
 
-rand_grid <- grid_regular(mtry(range= c(1,20)), min_n(range = c(1,5)),levels = 8)
+rf_wf_trad <- workflow() %>% add_model(rf %>% set_args(mtry = tune(), trees = 128 ,min_n = tune())) %>% add_recipe(min_re_trad)
+
+
+rand_grid <- grid_regular(mtry(range= c(1,19)), min_n(range = c(1,10)),levels = 10)
+
+rand_grid_trad <- grid_regular(mtry(range= c(1,15)), min_n(range = c(1,10)),levels = 10)
 
 
 ```
+`mtry` is the number of randomly selected features and we will be tuning that from 1-19. we will also tune `min_n` from 1-10. since we have less features, our grid for our traditional statistic model only has a `mtry` from 1-15. Trees were selected to be large enough but not too large to be inefficient. we will be using the `ranger` engine. 
 
 
+# Model Tuning
 
-# Tuning
+Below we will be plotting and selecting the models with the lowest Root Mean Squared error when preformed cross-validation. I have created separate R scripts and save the results in rda files. We will also look at the 5 best performing models of each model type.
 
+## elastic net 
 ```{r}
 load(file = "tune_elas.rda")
 autoplot(tune_elas)
@@ -237,8 +322,9 @@ best_elas <- select_best(tune_elas,"rmse")
 elas_metrics
 best_elas
 ```
-It appears that Elastic Net Model 95, a lasso regression model with a penalty of .2783 produces an RMSE of 1.5637. It is interesting as I would've though a mixture of lasso and ridge would preform best.
+It appears that Elastic Net Model 21, an elastic net model with a penalty of .00001 and mixture of .2222 produces an RMSE of 1.2948. Small Values of penalty and small mixture produce the best results.
 
+## K Nearest Neighbors
 ```{r}
 load(file = "tune_knn.rda")
 autoplot(tune_knn)
@@ -248,8 +334,9 @@ best_knn
 knn_metrics
 
 ```
- KNN Model 6, A 28 nearest neighbor model weighted with the biweight function produced the lowest RMSE with 3.3310.
+KNN Model 96, A 56 nearest neighbor model weighted with the `triweight` function produced the lowest RMSE with 3.5387. The top 5 models all produced RMSE of 3.54 with different amounts of neighbors and different weight functions. 
 
+## Boosted Trees
 ```{r}
 load(file = "tune_boost.rda")
 autoplot(tune_boost)
@@ -258,8 +345,9 @@ best_boost <- select_best(tune_boost,"rmse")
 boost_metrics
 best_boost
 ```
-Boosted tree model 20, a 1000 tree model with a tree depth of 2 produced the lowest RMSE with .3665.
+Boosted tree model 22, a 112 tree model with a tree depth of 3 produced the lowest RMSE with 1.3772. A tree depth of 1,2 or 3 produced the best model and no improvements were made over large numbers of trees.
 
+## Random Forest
 ```{r}
 load(file = "tune_rand.rda")
 autoplot(tune_rand)
@@ -269,28 +357,27 @@ rand_metrics
 best_rand
 
 ```
-Random Forest model 24, a model that used all 20 predictors to use its trees and had a minimum of 3 nodes produced the lowest RMSE with .4494.
+Random Forest model 97, a model that used a subset of 13 predictors in its trees and had a minimum of 10 nodes produced the lowest RMSE with 1.3237. Large subsets of predictors and large minimum number of nodes did best.
 
 
-# Congratulations Boosted Tree Model 20!!! 
+# Results
 
-Our Boosted tree Model 20, a 1000 tree model with a tree depth of 2 performed best out of the 812 total models across our four model types. With an RMSE value of .3665, it was .0829 lower than our best random forest model, 1.197 lower RMSE than the best elastic net model, and a huge 2.9645 lower RMSE than our best KNN model. Our Boosted tree model fit a 2 level pruned decision tree and weighted features it found important. Let's finalize our workflow and fit our model to the testing set.
+ 
 
-### Fitting Boosted Tree Model 20 to our testing set
+Our Elastic Net Model 21, an elastic net model with a penalty of .00001 and mixture of .2222 produced an RMSE of 1.2948. It performed best out of the 340 total models across our four model types. With an RMSE value of 1.2948, RMSE was .0289 lower than our best random forest model, .0824 lower RMSE than our best boosted tree model, and a huge 2.2439 lower RMSE than our best KNN model.Let's finalize our workflow and fit our model to the testing set.
+
+## Fitting Elastic Net Model 21 to our testing set
 ```{r}
 
-bt_wf_f <- finalize_workflow(bt_wf,best_boost)
+en_wf_f <- finalize_workflow(en_wflow,best_elas)
 
-min_train_fit <- fit(bt_wf_f, data = player_train)
+min_train_fit <- fit(en_wf_f, data = player_train)
 
-min_test_fit <- fit(bt_wf_f, data = player_test)
+min_test_fit <- fit(en_wf_f, data = player_test)
 
-player_test_pred <- augment(min_test_fit,player_test)
-player_train_pred <- augment(min_train_fit,player_train)
+player_test_pred <- augment(min_test_fit,player_test) %>% select(c(minExact,.pred))
+player_train_pred <- augment(min_train_fit,player_train) %>%  select(c(minExact,.pred))
 
-
-rsq <- metric_set(rsq)
-rmse <- metric_set(rmse)
 
 rsq(player_test_pred, truth = minExact, estimate = .pred)
 rmse(player_test_pred, truth = minExact, estimate = .pred)
@@ -299,23 +386,99 @@ rsq(player_train_pred, truth = minExact, estimate = .pred)
 rmse(player_train_pred, truth = minExact, estimate = .pred)
 
 ```
-Our model returned an RSQ value of .9999 and a  Root Mean Squared Error of .0965 on our test data, and an RSQ value of .9997 and a RMSE of .1639.   
+Our model returned an RSQ value of .9858 and a  Root Mean Squared Error of 1.263 on our test data, and an RSQ value of .9851 and a RMSE of 1.287 on our training data. Our test RMSE and our training RMSE our nearly identical indicating good fit. Our Elastic Net model was able to predict minutes played within about a minute of acutal minutes played.
 
-```{r,eval = FALSE}
-metrics_boost <- collect_metrics(tune_tree) %>% arrange(desc(mean))
-metrics_boost
-best_bt <- select_best(tune_boost)
+I'm shocked that our elastic net model was apple to achieve such a high RSQ, it's almost surely due to the near linear correlation between possessions and minutes played. What if we only used features that didn't use possessions?
 
-bt_wf_f <- finalize_workflow(bt_wf,best_bt)
+# Traditional Stats Model Tuning
 
-bt_final_fit <- fit(bt_wf_f,starter_train)
-
-rsq <- metric_set(rsq)
-
-min_pred <- predict(bt_final_fit,starter_test) %>%  bind_cols(starter_test %>% select(minExact))
-
-rsq(min_pred, truth = minExact, estimate = .pred)
-
-rmse(min_pred, truth = minExact, estimate = .pred)
+## Elastic net
+```{r}
+load(file = "tune_elas_trad.rda")
+autoplot(tune_elas_trad)
+elas_metrics_trad <- show_best(tune_elas_trad,"rmse")
+best_elas_trad <- select_best(tune_elas_trad,"rmse")
+elas_metrics_trad
+best_elas_trad
 
 ```
+Our best elastic net model produced a RMSE of 5.038 with a penalty of .00001 and a mixture of .2222.
+
+## K Nearest Neighbors
+```{r}
+load(file = "tune_knn_trad.rda")
+autoplot(tune_knn_trad)
+knn_metrics_trad <- show_best(tune_knn_trad,"rmse")
+best_knn_trad <- select_best(tune_knn_trad,"rmse")
+best_knn_trad
+knn_metrics_trad
+
+
+```
+ KNN Model 98, a 78 nearest neighbor model with a triweight weight function, produced an RMSE of 4.5919.
+ 
+## Boosted Trees
+```{r}
+load(file = "tune_boost_trad.rda")
+autoplot(tune_boost_trad)
+boost_metrics_trad <- show_best(tune_boost_trad,"rmse")
+best_boost_trad <- select_best(tune_boost_trad,"rmse")
+boost_metrics_trad
+best_boost_trad
+```
+Boosted Tree model 12, a 112 tree model with a node depth of 2, produced an RMSE of 4.4434.
+
+## Random Forest
+```{r}
+load(file = "tune_rand_trad.rda")
+autoplot(tune_rand_trad)
+rand_metrics_trad <- show_best(tune_rand_trad,"rmse")
+best_rand_trad <- select_best(tune_rand_trad,"rmse")
+rand_metrics_trad
+best_rand_trad
+
+```
+Random Forest model 66, a model that used a subset of 8 predictors in its trees and had a minimum of 7 nodes produced the lowest RMSE with 4.4781.
+
+# Results(Traditional Statistics)
+
+Boosted tree model 12, a 112 tree model with a node depth of 2, produced an RMSE of 4.4434. It performed best out of the 340 total models across our four model types. With an RMSE value of 4.4434, RMSE was .0347 lower than our best random forest model, .5947 lower RMSE than our best elastic net model, and .1485 lower RMSE than our best KNN model. Interestingly, our Elastic net model went from our best model with the possession stats to our worst performing model. This makes sense as elastic net is essentially regression but with modified coefficients. Our KNN model saw a huge jump in performance most likely due to the non-parametric distribution of our underlying data. Now,let's finalize our workflow and fit our model to the testing set.
+
+## Fitting Boosted tree model 12 to our testing set
+```{r}
+
+bt_wf_trad_f <- finalize_workflow(bt_wf_trad,best_boost_trad)
+
+min_train_fit_trad <- fit(bt_wf_trad_f, data = player_train)
+
+min_test_fit_trad <- fit(bt_wf_trad_f, data = player_test)
+
+player_test_pred_trad <- augment(min_test_fit_trad,player_test) %>% select(c(minExact,.pred))
+player_train_pred_trad <- augment(min_train_fit_trad,player_train) %>%  select(c(minExact,.pred))
+
+
+rsq(player_test_pred_trad, truth = minExact, estimate = .pred)
+rmse(player_test_pred_trad, truth = minExact, estimate = .pred)
+
+rsq(player_train_pred_trad, truth = minExact, estimate = .pred)
+rmse(player_train_pred_trad, truth = minExact, estimate = .pred)
+
+```
+Our model returned an RSQ value of .8855 and a Root Mean Squared Error of 3.5916 on our test data, and an RSQ value of .8572 and a RMSE of 3.9786 on our training data. Our test RMSE and our training RMSE our nearly identical indicating good fit. Our Boosted Tree model was able to predict minutes played with decent accuracy but nowhere near as good as the stats using possessions.
+
+# Conclusion
+
+```{r}
+MAPE_test <- MAPE(player_test_pred$.pred,player_test_pred$minExact) 
+MAPE_test_trad <- MAPE(player_test_pred_trad$.pred,player_test_pred_trad$minExact) 
+
+MAPE_test
+MAPE_test_trad
+
+```
+In conclusion I used MAPE(Mean absolute percentage error) to determine the average percentage each recipe type was off by, the MAPE of our original recipe was 6.30%, so on average our predictions were off by 6.295%. Our recipe using only traditional stats fared much worse though with a MAPE of 20.70%, so on average our predictions were off by 20.70%. According to (https://stephenallwright.com/good-mape-score/), a good rule of thumb is that a very good model has a less than <10% MAPE, 10-20% MAPE is good and 20-50% is ok. So you original model did a very good job at predicting minutes played, while our model only using traditional metrics fared much worse with a mediocre prediction rate. Looking into our data it appears that the error of our players that played few minutes is relatively large, as due to a small sample size of their stats a player can score a few points or grab a few rebounds and appear to have played more minutes to the model than in actuality. The same goes for our model with traditional stats but magnified. Players that played small amounts of minutes would have their predicted minutes doubled if not more, in higher values though our model is much better at accurately predicting minutes played.
+
+
+## A Special Thanks to
+
+Thank you to abresler on github, who created nbastatR the API that helped scrape the data for this project. Thank you to the NBA and NBA.com and the statisticians that record and upload these game stats. Thank you to basketballreference.com for having easily searchable stats. Thank you to Stephenall Wright for his article about MAPE scores.    
